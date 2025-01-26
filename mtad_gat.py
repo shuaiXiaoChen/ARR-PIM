@@ -168,100 +168,61 @@ class MTAD_GAT(nn.Module):
         # x shape (b, n, k): b - batch size, n - window size, k - number of features
         k1,k2,k3 = x.shape
         t = x
+        series_patch_mean = []
+        prior_patch_mean = []
+        x_ori = self.embedding_window_size(x)
+        # print(x.shape)
+        for patch_index, patchsize in enumerate(self.patch_size):
+            x_patch_size, x_patch_num = x, x
+            x_patch_size = rearrange(x_patch_size, 'b l m -> b m l')  # Batch channel win_size
+            x_patch_num = rearrange(x_patch_num, 'b l m -> b m l')  # Batch channel win_size
+        
+            x_patch_size = rearrange(x_patch_size, 'b m (n p) -> (b m) n p', p=patchsize)
+            x_patch_size = self.embedding_patch_size[patch_index](x_patch_size)
+            x_patch_num = rearrange(x_patch_num, 'b m (p n) -> (b m) p n', p=patchsize)
+            x_patch_num = self.embedding_patch_num[patch_index](x_patch_num)
 
-        # 多尺度操作，对比学习，有两个一样的x作为输入
-        # Mutil-scale Patching Operation
-        # ------begin of CS------
-        # series_patch_mean = []
-        # prior_patch_mean = []
-        # x_ori = self.embedding_window_size(x)
-        # # print(x.shape)
-        # for patch_index, patchsize in enumerate(self.patch_size):
-        #     x_patch_size, x_patch_num = x, x
-        #     x_patch_size = rearrange(x_patch_size, 'b l m -> b m l')  # Batch channel win_size
-        #     x_patch_num = rearrange(x_patch_num, 'b l m -> b m l')  # Batch channel win_size
-        #
-        #     x_patch_size = rearrange(x_patch_size, 'b m (n p) -> (b m) n p', p=patchsize)
-        #     x_patch_size = self.embedding_patch_size[patch_index](x_patch_size)
-        #     x_patch_num = rearrange(x_patch_num, 'b m (p n) -> (b m) p n', p=patchsize)
-        #     x_patch_num = self.embedding_patch_num[patch_index](x_patch_num)
-        #     # 以上有可能是多尺度卷积，我如果没猜错的话。x_patch_size，x_patch_num，二者应该是相等的。
-        #     series, prior = self.encoder(x_patch_size, x_patch_num, x_ori, patch_index)
-        #     series_patch_mean.append(series), prior_patch_mean.append(prior)
-        #
-        # series_patch_mean = list(_flatten(series_patch_mean))
-        # prior_patch_mean = list(_flatten(prior_patch_mean))
-        # # print("len(series_patch_mean): ", len(series_patch_mean))
-        # # print("len(prior_patch_mean:) ", len(prior_patch_mean))
-        #
-        # # 将展平的列表转换为张量
-        # series_patch_mean_tensor = torch.stack(series_patch_mean)  # 假设每个元素是张量
-        # prior_patch_mean_tensor = torch.stack(prior_patch_mean)  # 假设每个元素是张量
-        # # print(series_patch_mean_tensor.shape)
-        # # print(prior_patch_mean_tensor.shape)
-        #
-        # # 组合张量
-        # x = torch.cat((series_patch_mean_tensor, prior_patch_mean_tensor), dim=3)  # 假设沿第1维拼接
-        # x = torch.squeeze(x)
-        # b1, n, h, w = x.shape
-        # merged_tensor = x.permute(1, 3, 0, 2)   # 交换第 1 和第 2 维度
-        # c1, c2, c3, c4 = merged_tensor.shape  # 从 merged_tensor 计算 batch size 和其他维度\
-        # # print("merged_tensor.shape:",merged_tensor.shape)
-        # # merged_tensor.shape: torch.Size([64, 80, 9, 160])
-        # # b, n, h, w ：9 64 160 80
-        # # k1,k2,k3:256 100 38
-        # # b=64
-        # # merged_tensor numel: 7372800
-        # new_k2_d = c3 * c4 # 80*12800=1024000
-        # x = merged_tensor.reshape(c1, k2, new_k2_d)  # 调整为动态的形状
-        # # print(f"x shape after reshape   : {x.shape}")
-        # # 应用线性变换
-        # linear = nn.Linear(new_k2_d, k3).cuda()
-        # x = linear(x)  # 这里的输出将自动根据输入的窗口大小和特征维度调整
+            series, prior = self.encoder(x_patch_size, x_patch_num, x_ori, patch_index)
+            series_patch_mean.append(series), prior_patch_mean.append(prior)
+        
+        series_patch_mean = list(_flatten(series_patch_mean))
+        prior_patch_mean = list(_flatten(prior_patch_mean))
 
-        #--------end of CS-------
-
-        # --------------from MAGNN work import adjx---------------#
-        # print("--------------from MAGNN work import adjx---------------")
-        # ---------begin--------
-        # x = x+t
-        self.scale_set = [1, 0.8, 0.6, 0.5]  # 缩放因子(影响因素，比例)
-        # 模块B：输出邻接矩阵，scale_set是缩放因子，用于灵活调整节点的特征，通过forward传递参数
+        series_patch_mean_tensor = torch.stack(series_patch_mean)
+        prior_patch_mean_tensor = torch.stack(prior_patch_mean) 
+        x = torch.cat((series_patch_mean_tensor, prior_patch_mean_tensor), dim=3) 
+        x = torch.squeeze(x)
+        b1, n, h, w = x.shape
+        merged_tensor = x.permute(1, 3, 0, 2) 
+        c1, c2, c3, c4 = merged_tensor.shape 
+        new_k2_d = c3 * c4 
+        x = merged_tensor.reshape(c1, k2, new_k2_d)
+        linear = nn.Linear(new_k2_d, k3).cuda()
+        x = linear(x) 
+        x = x+t
+        self.scale_set = [1, 0.8, 0.6, 0.5]
         adj_matrix = self.gc(self.idx, self.scale_idx,self.scale_set)
-        # print("000",x.shape)
-        # scale:经过多尺度卷积后形成的多尺度特征，层数：3，在这里我可以对input重复添加三次形成
         scale = []
         outputs = []
         for i in range(self.layer_num):
           scale.append(x)
-        # print("len(scale),scale[0].shape",len(scale),scale[0].shape)
-        for i in range(self.layer_num):     # 融合邻接矩阵与输入的input信息
+        for i in range(self.layer_num): 
             output = self.gconv1[i](scale[i], adj_matrix[i]) + self.gconv2[i](scale[i], adj_matrix[i].transpose(1, 0))
             outputs.append(output)
-        # print("output is :",outputs)
-        # print("output.shape[0]:",outputs[0].shape)
         outputs = torch.cat(outputs,dim=1)
         outputs = torch.squeeze(outputs)
-        # print("outputs.shape:",outputs.shape)
         outputs = self.linear_model(outputs)
-        # print("outputs.shape:",outputs.shape)
-        x = outputs   # 修改+t
-        # --------------end of MAGNN work import adjx---------------#
-
-        # print("x.shape (after adj and x):",x.shape) # x.shape (after adj and x): torch.Size([256, 100, 38])
-        # error shape:x.shape(after x = self.conv(x)): torch.Size([48, 256, 38])
+        x = outputs 
+        
         x = x+t
         x = self.conv(x)
-        # print("x.shape(after x = self.conv(x)):",x.shape)
         h_feat = self.feature_gat(x)
         h_temp = self.temporal_gat(x)
-
         h_cat = torch.cat([x, h_feat, h_temp], dim=2)  # (b, n, 3k)
 
         _, h_end = self.gru(h_cat)
-        # print("x.shape:",x.shape)
-        h_end = h_end.view(x.shape[0], -1)   # Hidden state for last timestamp # 重塑形状
-        predictions = self.forecasting_model(h_end) # 预测模型，这个要看一下
-        recons = self.recon_model(h_end) # 通过rnn来实现重构，重构模型，也要看一下
+        h_end = h_end.view(x.shape[0], -1) 
+        predictions = self.forecasting_model(h_end)
+        recons = self.recon_model(h_end) 
 
         return predictions, recons
