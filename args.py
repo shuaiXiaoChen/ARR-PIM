@@ -1,9 +1,8 @@
 import argparse
 
 
-def str2bool(v): # 将str类型强制转换为bool型
-    if isinstance(v, bool): # 判定第一个对象类型与第二个参数是否一致，相同返回true，第二个对象可以是元组（是元组时只要与其中一个一样也返回true）
-        return v
+def str2bool(v):
+    if isinstance(v, bool): 
     if v.lower() in ("yes", "true", "t", "y", "1"):
         return True
     elif v.lower() in ("no", "false", "f", "n", "0"):
@@ -16,8 +15,8 @@ def get_parser():
     parser = argparse.ArgumentParser()
 
     # -- Data params ---
-    parser.add_argument("--dataset", default="SWaT") # str.upper--将小写字母转为大写字母24.7.29change
-    parser.add_argument("--group", type=str, default="C-1", help="Required for MSL dataset. <group_index>-<index>") # 24.7.29change
+    parser.add_argument("--dataset", default="SWaT") 
+    parser.add_argument("--group", type=str, default="C-1", help="Required for MSL dataset. <group_index>-<index>") 
     parser.add_argument("--lookback", type=int, default=100) # argument for window_size
     parser.add_argument("--normalize", type=str2bool, default=True)
     parser.add_argument("--spec_res", type=str2bool, default=False)
@@ -43,10 +42,8 @@ def get_parser():
 
     # --- Train params ---
     parser.add_argument("--epochs", type=int, default=5)
-    # parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--val_split", type=float, default=0.1)
     parser.add_argument("--bs", type=int, default=256)
-    # parser.add_argument("--bs", type=int, default=512)
     parser.add_argument("--init_lr", type=float, default=1e-3)
     parser.add_argument("--shuffle_dataset", type=str2bool, default=True)
     parser.add_argument("--dropout", type=float, default=0.3)
