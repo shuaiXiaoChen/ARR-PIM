@@ -22,10 +22,10 @@ class ConvLayer(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, x):
-        x = x.permute(0, 2, 1) # 调换维度数据，符合卷积需要(batch, features, time_steps)
+        x = x.permute(0, 2, 1) 
         x = self.padding(x)
         x = self.relu(self.conv(x))
-        return x.permute(0, 2, 1)  # Permute back ，返回原始维度(batch, time_steps, features)
+        return x.permute(0, 2, 1) 
 
 
 class FeatureAttentionLayer(nn.Module):
@@ -70,14 +70,7 @@ class FeatureAttentionLayer(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        # x shape (b, n, k): b - batch size, n - window size, k - number of features
-        # For feature attention we represent a node as the values of a particular feature across all timestamps
-
         x = x.permute(0, 2, 1)
-
-        # 'Dynamic' GAT attention
-        # Proposed by Brody et. al., 2021 (https://arxiv.org/pdf/2105.14491.pdf)
-        # Linear transformation applied after concatenation and attention layer applied after leakyrelu
         if self.use_gatv2:
             a_input = self._make_attention_input(x)                 # (b, k, k, 2*window_size)
             a_input = self.leakyrelu(self.lin(a_input))             # (b, k, k, embed_dim)
@@ -240,7 +233,7 @@ class GRULayer(nn.Module):
         self.gru = nn.GRU(in_dim, hid_dim, num_layers=n_layers, batch_first=True, dropout=self.dropout)
 
     def forward(self, x):
-        out, h = self.gru(x) # 为什么只提取最后一个时间步呢？
+        out, h = self.gru(x)
         out, h = out[-1, :, :], h[-1, :, :]  # Extracting from last layer
         return out, h
 
@@ -280,8 +273,7 @@ class ReconstructionModel(nn.Module):
         self.decoder = RNNDecoder(in_dim, hid_dim, n_layers, dropout)
         self.fc = nn.Linear(hid_dim, out_dim)
 
-        # -------------新增的趋势感知模块---------- #
-        normalization = "None"  # 手动控制，默认为None
+        normalization = "None" 
         gamma = 0.99
         num_channels = in_dim
         self.normalization = normalization
@@ -291,22 +283,18 @@ class ReconstructionModel(nn.Module):
             self.normalizer = Detrender(num_channels, gamma=gamma)
         else:
             self.use_normalizer = False
-        # -------------新增的趋势感知模块---------- #
-
 
     def forward(self, x):
         x1 = x
         if self.use_normalizer:
-            x1 = self.normalizer(x1, "norm")  # 进行归一化处理
+            x1 = self.normalizer(x1, "norm")
         # x will be last hidden state of the GRU layer
         h_end = x1
         # h_end = x
         h_end_rep = h_end.repeat_interleave(self.window_size, dim=1).view(x.size(0), self.window_size, -1)
-        # h_end_rep = h_end.repeat_interleave(self.window_size, dim=1).view(x.size(0), self.window_size, -1)
-
         decoder_out = self.decoder(h_end_rep)
         if self.use_normalizer:
-            decoder_out = self.normalizer(decoder_out, "denorm")    # 反归一化处理这里的x1应当是隐层输出
+            decoder_out = self.normalizer(decoder_out, "denorm")
         out = self.fc(decoder_out)
         return out
 
@@ -321,43 +309,29 @@ class Forecasting_Model(nn.Module):
 
     def __init__(self, in_dim, hid_dim, out_dim, n_layers, dropout):
         super(Forecasting_Model, self).__init__()
-        layers = [nn.Linear(in_dim, hid_dim)] # 这是第一层
+        layers = [nn.Linear(in_dim, hid_dim)] 
         for _ in range(n_layers - 1):
-            layers.append(nn.Linear(hid_dim, hid_dim)) # 这是其他层
+            layers.append(nn.Linear(hid_dim, hid_dim))
 
-        layers.append(nn.Linear(hid_dim, out_dim)) # 这是最后一层，一共有n层
+        layers.append(nn.Linear(hid_dim, out_dim))
 
         self.layers = nn.ModuleList(layers)
-        self.dropout = nn.Dropout(dropout) # 防止过拟合
+        self.dropout = nn.Dropout(dropout) 
         self.relu = nn.ReLU()
 
     def forward(self, x):
-        for i in range(len(self.layers) - 1): # 每一层都使用droupout技术，因为for
+        for i in range(len(self.layers) - 1): 
             x = self.relu(self.layers[i](x))
             x = self.dropout(x)
         return self.layers[-1](x)
 
 
-# -----------------------modules from MAGNN---------------------------#
 class nconv(nn.Module):
     def __init__(self):
         super(nconv,self).__init__()
 
-    def forward(self,x, A): # (x, A)：输入张量 x 和邻接矩阵 A。
-        """
-            'ncvl,vw->ncwl'：定义了张量乘积的模式。
-            n：批次维度
-            c：特征维度
-            v：节点维度
-            l：序列长度
-            x 的形状为 (batch_size, num_channels, num_vertices, seq_length)。
-            A 的形状为 (num_vertices, num_vertices)。
-            输出张量的形状为 (batch_size, num_channels, num_vertices, seq_length)。
-            x 的维度 v（节点维度）与 A 的维度 v 相乘。
-            结果是每个节点的特征根据邻接矩阵 A 进行加权求和，从而实现节点特征在图结构上的传播。
-        """
-        # print("x.shape:",x.shape,"A.shape:",A.shape)
-        # x = torch.einsum('ncvl,vw->ncwl',(x,A)) # 爱因斯坦求和约定的实现，用于简洁地表示复杂的张量操作
+    def forward(self,x, A):
+
         x = torch.einsum('bwn,nm->bwm',(x,A)) # 爱因斯坦求和约定的实现，用于简洁地表示复杂的张量操作
         # print("x(after torch.einsum).shape",x.shape)
         return x.contiguous() # 保持内存连续性
@@ -368,14 +342,12 @@ class nconv(nn.Module):
         但在处理多维张量时具有更大的灵活性和效率。
     """
 
-class linear(nn.Module):  # 定义初始化函数，接受三个参数：输入通道数 c_in、输出通道数 c_out 和一个布尔值 bias，表示是否使用偏置。
+class linear(nn.Module):  
     def __init__(self, c_in, c_out, bias=True):
         super(linear, self).__init__()
         self.mlp = torch.nn.Conv2d(c_in, c_out, kernel_size=(1, 1), padding=(0, 0), stride=(1, 1), bias=bias)
 
     def forward(self, x):
-        # print("-----class linear(nn.Module)-----")
-        # print("class linear(nn.Module):\n",x.shape)
         return self.mlp(x)
 
 
@@ -385,140 +357,96 @@ class LinearForReshape(nn.Module):
         self.linear_layer = nn.Linear(56*38, 100*38)
 
     def forward(self, x):
-        # 调整输入张量的形状
-        # print("x.size():",x.size())
         batch_size, channels, length = x.size()
         x = x.permute(1, 0, 2).reshape(channels, -1)
         x = self.linear_layer(x)
         x = torch.relu(x)
-        # print("x.size():",x.size())
-        x = x.view(channels, 100, length)  # 重新调整为目标形状
+        x = x.view(channels, 100, length)
         return x
 
 
 class Conv1DReshape(nn.Module):
     def __init__(self):
         super(Conv1DReshape, self).__init__()
-        # 定义1D卷积层，将输入通道数从56变为100
         self.conv1d = nn.Conv1d(in_channels=56, out_channels=100, kernel_size=1)
 
     def forward(self, x):
-        # 输入张量的形状 (56, 256, 38)
-        # print(f"Input shape: {x.shape}")  # 调试信息
 
         if len(x.size()) != 3:
             raise ValueError("Input tensor must be 3-dimensional")
 
-        # 调整输入张量的形状为 (256, 56, 38)，以便应用1D卷积
-        x = x.permute(1, 0, 2)  # (256, 56, 38)
-
-        # 通过1D卷积层处理，调整为 (256, 100, 38)
+        x = x.permute(1, 0, 2) 
         x = self.conv1d(x)
-
-        # 最终输出形状为 (256, 100, 38)
-        # print(f"Output shape: {x.shape}")  # 调试信息
-
         return x
 
-class mixprop(nn.Module):  # 多层图卷积
+class mixprop(nn.Module): 
     def __init__(self, c_in, c_out, gdep, dropout, alpha):
         super(mixprop, self).__init__()
-        self.nconv = nconv()    # 输入input与邻接矩阵进行张量运算
+        self.nconv = nconv() 
         self.mlp = linear((gdep + 1) * c_in, c_out)
-        self.gdep = gdep  # 存储传播的阶数。
+        self.gdep = gdep  
         self.dropout = dropout
-        self.alpha = alpha  # 存储残差连接的权重参数。
-        """
-            c_in：输入特征的通道数。
-            x 是初始输入特征张量，形状为 (batch_size, num_nodes, c_in)
-            c_out：输出特征的通道数。
-            gdep：传播的阶数，图卷积的层数。
-            dropout：丢弃率，用于防止过拟合。
-            alpha：残差连接中的权重参数，用于控制输入特征与传播特征的加权和。
-            self.nconv：图卷积操作层。
-            self.mlp：一个全连接层（线性变换），将多阶传播后的特征进行线性组合。
-        """
+        self.alpha = alpha 
+      
     def forward(self, x, adj):
-        # print("------class mixprop(nn.Module): --------")
-        # print("x.shape:",x.shape)
-        # print("adj:",adj.shape)
-        adj = adj + torch.eye(adj.size(0)).to(x.device)  # torch.eye(adj.size(0)) 生成一个单位矩阵（对角线上全为 1），这样每个节点都会在邻接矩阵中多一条到自己的边。
-        d = adj.sum(1)  # 计算每个节点的度，即每个节点的邻居数量。对于每一行，将所有元素相加，得到节点度的向量 d。
-        h = x  # 初始化特征 h 为输入特征 x，并将其添加到列表 out 中，以便后续拼接。
+
+        adj = adj + torch.eye(adj.size(0)).to(x.device) 
+        h = x 
         out = [h]
-        a = adj / d.view(-1, 1)  # 归一化邻接矩阵，使得邻接矩阵的每一行之和为1。（首先将邻接矩阵变成一列，然后同时除以这个和，得到归一化的每一行和为1的邻接矩阵）
+        a = adj / d.view(-1, 1) 
         for i in range(self.gdep):
-            # print("i of gdep:",i)
-            h = self.alpha * x + (1 - self.alpha) * self.nconv(h, a)  # 表示对 h 进行图卷积操作，使用归一化邻接矩阵 a（对输入特征和邻接矩阵进行图卷积运算）。
-            out.append(h)  # 在将更新后的特征添加到列表 out 中。为什么要计算两个重复的结果呢
-        ho = torch.cat(out, dim=1)  # 将所有层的特征在特征维度上（即列方向）拼接，形成新的特征矩阵 ho。
-        # print("to mlp next!!!!")
+
+            h = self.alpha * x + (1 - self.alpha) * self.nconv(h, a)  
+            out.append(h) 
+        ho = torch.cat(out, dim=1)
         ho = torch.unsqueeze(ho,0)
-        # print("ho.shape:",ho.shape)
         ho = torch.permute(ho,(0,2,1,3))
-        # print("ho.shape(after permute):",ho.shape)
-        ho = self.mlp(ho)  # 对拼接后的特征进行线性变换，得到最终的输出特征。
+        ho = self.mlp(ho) 
         return ho
 
-
-"""
-    总的来说，这个类通过学习节点嵌入，然后利用这些嵌入来创建每个节点的前 k 个邻居的邻接矩阵，
-    这个过程在指定的层数内重复。
-    这些邻接矩阵可以用于后续的图神经网络操作，如消息传递和特征聚合。每个邻接矩阵反映了不同层次的节点关系和连接强度。
-    adj_set 是一个列表，包含多个邻接矩阵，每个邻接矩阵对应于一层图构造
-    这些邻接矩阵是稀疏的，保留了节点之间的前 k 个最强连接
-    adj_set 的长度等于 self.layers，即图构造层的数量。
-    第一个代码版本适用于需要稀疏化邻接矩阵的场景，特别是在大规模图上可以有效减少计算和存储开销。
-"""
 class graph_constructor(nn.Module):
     def __init__(self, nnodes, k, dim, layer_num, device,
-                 alpha=3):  # 图中节点数量，n：需考虑邻居数量，dim：节点嵌入维度，layer_num：神经网络的层数，alpha：缩放因子（默认值为3）
+                 alpha=3): 
         super(graph_constructor, self).__init__()
-        self.nnodes = nnodes  # 将节点数量保存为实例变量
+        self.nnodes = nnodes  
         self.layers = layer_num
 
-        self.emb1 = nn.Embedding(nnodes, dim)  # 分别定义两个嵌入层 emb1 和 emb2，用于表示节点特征，维度为 dim。
+        self.emb1 = nn.Embedding(nnodes, dim)  
         self.emb2 = nn.Embedding(nnodes, dim)
 
-        self.lin1 = nn.ModuleList()  # 初始化两个 ModuleList 对象，用于存储线性层。
+        self.lin1 = nn.ModuleList() 
         self.lin2 = nn.ModuleList()
-        for i in range(layer_num):  # 遍历 layer_num 的范围，以创建指定数量的层。
-            self.lin1.append(nn.Linear(dim, dim))  # lin1 和 lin2 中添加线性层，每个线性层将 dim 维的输入转换为 dim 维的输出。
+        for i in range(layer_num):  
+            self.lin1.append(nn.Linear(dim, dim))  
             self.lin2.append(nn.Linear(dim, dim))
 
         self.device = device
-        self.k = k  # 将邻居数量保存为实例变量。====子图尺寸
+        self.k = k  
         self.dim = dim
         self.alpha = alpha
 
-    def forward(self, idx, scale_idx, scale_set):  # idx：节点的索引，scale_idx：缩放索引，scale_set：每一层的缩放因子集合。
-        # print("self.device(of class graph_constructor in modules.py):",self.device)
-        # print("idx.device(of class graph_constructor in modules.py):",idx.device)
-        nodevec1 = self.emb1(idx)  # 从 emb1 和 emb2 中获取由 idx 索引的节点嵌入。形成n行dim列的嵌入向量
+    def forward(self, idx, scale_idx, scale_set): 
+        nodevec1 = self.emb1(idx)  
         nodevec2 = self.emb2(idx)
+        adj_set = [] 
 
-        adj_set = []  # 初始化一个空列表，用于存储每一层的邻接矩阵。
-
-        for i in range(self.layers):  # 遍历 self.layers 的范围，对每一层执行操作。
+        for i in range(self.layers):  
             nodevec1 = torch.tanh(
-                self.alpha * self.lin1[i](nodevec1 * scale_set[i]))  # 对当前层的 nodevec1 和 nodevec2 应用线性变换，然后进行缩放和双曲正切激活。
+                self.alpha * self.lin1[i](nodevec1 * scale_set[i]))  
             nodevec2 = torch.tanh(self.alpha * self.lin2[i](nodevec2 * scale_set[i]))
             a = torch.mm(nodevec1, nodevec2.transpose(1, 0)) - torch.mm(nodevec2, nodevec1.transpose(1,
-                                                                                                     0))  # 计算 nodevec1 和 nodevec2 及其转置的矩阵乘积之差(相似度矩阵)，结果是一个反对称矩阵 a。
-            adj0 = F.relu(torch.tanh(self.alpha * a))  # 对 相似度矩阵 a 进行非线性处理，得到adj0. 应用缩放的双曲正切激活，然后应用ReLU激活，得到非负邻接矩阵 adj0。
-
-            mask = torch.zeros(idx.size(0), idx.size(0)).to(self.device)  # 指定设备上初始化一个形状为 (节点数量, 节点数量) 的零矩阵 mask。
-            mask.fill_(float('0'))  # 将 mask 填充为全零（这一步是多余的，因为初始化时已经是零）。
-            s1, t1 = adj0.topk(self.k, 1)  # 从 adj0 中选取每行的前 k 个最大值及其索引。
-            mask.scatter_(1, t1, s1.fill_(1))  # 根据索引 t1 更新 mask，将每行的前 k 个位置设为1。
-            # print(mask)
-            adj = adj0 * mask  # 将 adj0 和 mask 进行逐元素相乘，仅保留每行的前 k 个值。构建稀疏邻接矩阵
-            adj_set.append(adj)  # 将得到的邻接矩阵 adj 添加到 adj_set 列表中。
+                                                                                                     0))  
+            adj0 = F.relu(torch.tanh(self.alpha * a))  
+            mask = torch.zeros(idx.size(0), idx.size(0)).to(self.device) 
+            mask.fill_(float('0'))  
+            s1, t1 = adj0.topk(self.k, 1) 
+            mask.scatter_(1, t1, s1.fill_(1)) 
+            adj = adj0 * mask 
+            adj_set.append(adj) 
 
         return adj_set
 
-# contrastive study
-# 1.form embed.py
+
 class PositionalEmbedding(nn.Module):
     def __init__(self, d_model, max_len=5000):
         super(PositionalEmbedding, self).__init__()
@@ -571,7 +499,7 @@ class Encoder(nn.Module):
     def __init__(self, attn_layers, norm_layer=None):
         super(Encoder, self).__init__()
         self.attn_layers = nn.ModuleList(attn_layers)
-        self.norm = norm_layer  # DACStructure（一共有3层）
+        self.norm = norm_layer 
 
     def forward(self, x_patch_size, x_patch_num, x_ori, patch_index, attn_mask=None):
         series_list = []
@@ -582,7 +510,7 @@ class Encoder(nn.Module):
             prior_list.append(prior)
         return series_list, prior_list
 
-# model from atten.py
+
 class DAC_structure(nn.Module):
     def __init__(self, win_size, patch_size, channel, mask_flag=True, scale=None, attention_dropout=0.05,
                  output_attention=False):
@@ -599,20 +527,20 @@ class DAC_structure(nn.Module):
                 attn_mask):
 
         # Patch-wise Representation
-        B, L, H, E = queries_patch_size.shape  # batch_size*channel, patch_num, n_head, d_model/n_head
+        B, L, H, E = queries_patch_size.shape  
         scale_patch_size = self.scale or 1. / sqrt(E)
         scores_patch_size = torch.einsum("blhe,bshe->bhls", queries_patch_size,
-                                         keys_patch_size)  # batch*ch, nheads, p_num, p_num
+                                         keys_patch_size)  
         attn_patch_size = scale_patch_size * scores_patch_size
-        series_patch_size = self.dropout(torch.softmax(attn_patch_size, dim=-1))  # B*D_model H N N
+        series_patch_size = self.dropout(torch.softmax(attn_patch_size, dim=-1))  
 
         # In-patch Representation
-        B, L, H, E = queries_patch_num.shape  # batch_size*channel, patch_size, n_head, d_model/n_head
+        B, L, H, E = queries_patch_num.shape 
         scale_patch_num = self.scale or 1. / sqrt(E)
         scores_patch_num = torch.einsum("blhe,bshe->bhls", queries_patch_num,
-                                        keys_patch_num)  # batch*ch, nheads, p_size, p_size
+                                        keys_patch_num)  
         attn_patch_num = scale_patch_num * scores_patch_num
-        series_patch_num = self.dropout(torch.softmax(attn_patch_num, dim=-1))  # B*D_model H S S
+        series_patch_num = self.dropout(torch.softmax(attn_patch_num, dim=-1)) 
 
         # Upsampling
         series_patch_size = repeat(series_patch_size, 'b l m n -> b l (m repeat_m) (n repeat_n)',
@@ -679,20 +607,16 @@ class ConvTransformerForCon(nn.Module):
         super(ConvTransformerForCon, self).__init__()
         self.conv1 = nn.Conv2d(input_channels, intermediate_channels, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(intermediate_channels, output_channels, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(output_channels, 38, kernel_size=1)  # 将通道数直接转换为 51
-        self.pool = nn.AdaptiveAvgPool2d((100, 256))  # 自适应池化到 (100, 256)
+        self.conv3 = nn.Conv2d(output_channels, 38, kernel_size=1)  
+        self.pool = nn.AdaptiveAvgPool2d((100, 256))  
 
     def forward(self, x):
         print("x.shape in ConvTransformerForCon_1:",x.shape)
-        # 使用卷积层
+
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
-        x = self.conv3(x)  # 将通道数直接转换为 51
-
-        # 池化到 (100, 256)
+        x = self.conv3(x)  
         x = self.pool(x)
-
-        # 调整形状到 (256, 100, 51)
         x = x.permute(0, 2, 3, 1).reshape(256, 100, -1)
 
         return x
@@ -703,18 +627,10 @@ class DimReducer(nn.Module):
         self.fc = nn.Linear(input_dim, output_dim)
 
     def forward(self, x):
-        # x 的形状: [256, 100, 459]
         print("x.shape in DimReducer_2:",x.shape)
         batch_size, seq_len, feature_dim = x.shape
-        x = x.view(-1, feature_dim)  # 形状: [25600, 459]
-        x = self.fc(x)  # 形状: [25600, 51]
-        x = x.view(batch_size, seq_len, -1)  # 形状: [256, 100, 51]
+        x = x.view(-1, feature_dim)
+        x = self.fc(x) 
+        x = x.view(batch_size, seq_len, -1)
         a,b,c = x.shape
-        # print("modules---1",x.shape)
-        # if a != 256:
-        #     linear_layer = nn.Linear(a, 256)
-        #     reshaped_tensor = x.view(-1, a)  # 结果形状为 [100*51, 226]
-        #     transformed_tensor = linear_layer(reshaped_tensor)  # 结果形状为 [100*51, 256]
-        #     x = transformed_tensor.view(256, 100, 51)
-
         return x
