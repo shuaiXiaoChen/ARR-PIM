@@ -214,11 +214,10 @@ class Solver(object):
 
 
 
-        # (3) evaluation on the test set with the optimal threshold
         pred, gt = self.evaluate_performance(self.test_loader, criterion, temperature, optimal_thresh)
 
         anomaly_state = False
-        ## performance test (for)
+
         for i in range(len(gt)):
             if gt[i] == 1 and pred[i] == 1 and not anomaly_state:
                 anomaly_state = True
