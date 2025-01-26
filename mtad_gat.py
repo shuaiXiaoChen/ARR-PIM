@@ -1,10 +1,8 @@
 import torch
-# torch.cuda.empty_cache()
 import torch.nn as nn
-# next from contrastive
 from einops import rearrange
 from tkinter import _flatten
-# above come from contrastive
+
 
 from modules import (
     ConvLayer,
@@ -53,26 +51,25 @@ class MTAD_GAT(nn.Module):
 
     def __init__(
         self,
-        n_features,     # 特征数量
-        window_size,    # 窗口大小
-        out_dim,    # 特征输出维度
-        kernel_size=7,  # 卷积核大小
-        feat_gat_embed_dim=None,    # 特征层的线性变换输出维度
-        time_gat_embed_dim=None,    # 时间层的线性变换输出维度
-        use_gatv2=True,     # 修改后的注意力机制
-        gru_n_layers=1,     # GRU层数
-        gru_hid_dim=150,    # gru隐藏层维度
-        forecast_n_layers=1,     # 全连接预测层数
-        forecast_hid_dim=150,   # 全连接预测维度
-        recon_n_layers=1,    # gru重构层数
-        recon_hid_dim=150,  # gru重构维度
+        n_features,  
+        window_size,  
+        out_dim,   
+        kernel_size=7, 
+        feat_gat_embed_dim=None,   
+        time_gat_embed_dim=None,  
+        use_gatv2=True,    
+        gru_n_layers=1,   
+        gru_hid_dim=150,    
+        forecast_n_layers=1,   
+        forecast_hid_dim=150,  
+        recon_n_layers=1,   
+        recon_hid_dim=150,  
         dropout=0.2,
-        alpha=0.2,  # leaky rely激活函数的斜率参数
+        alpha=0.2, 
 
-        subgraph_size=20,   # 子图尺寸:k,subgraph_size = params['subgraph_size']
+        subgraph_size=20, 
         node_dim=40,
         device='cuda',
-        # device='cpu',
         propalpha=0.05,
     ):
         super(MTAD_GAT, self).__init__()
@@ -84,71 +81,52 @@ class MTAD_GAT(nn.Module):
         self.forecasting_model = Forecasting_Model(gru_hid_dim, forecast_hid_dim, out_dim, forecast_n_layers, dropout)
         self.recon_model = ReconstructionModel(window_size, gru_hid_dim, recon_hid_dim, out_dim, recon_n_layers, dropout) # 通过RNN实现重构
 
-        # 初始化邻接矩阵
-        # self.seq_length = seq_length  # 输入序列的长度
         self.single_step=True
-        self.layer_num=3    # 层数
-        self.gcn_depth = 2  # 图卷积深度
-        # self.conv_channels=[8, 16, 32, 64]   # conv_channels = params['conv_channels']，以下三个，手动调参
-        self.conv_channels=100   # conv_channels = params['conv_channels']，以下三个，手动调参
-        self.gnn_channels = [8, 16, 32, 64]  # gnn_channels = conv_channels,"conv_channels":{"_type":"choice","_value":[8, 16, 32, 64]}
-        # self.scale_channels=16  # scale_channels = conv_channels
-        self.scale_channels=[8, 16, 32, 64]  # scale_channels = conv_channels
-        self.gc = graph_constructor(n_features, subgraph_size, node_dim, self.layer_num, device)  # 多层次林截图构造器，形成邻接矩阵
-        self.idx = torch.arange(n_features).to(device)  # 索引，数量等于特征数量
-        self.scale_idx = torch.arange(n_features).to(device)  # 尺度索引张量,数量等于节点数量
-        self.seq_length = 24*7 # 输入序列的长度
-        # self.seq_length = 12  # 输入序列的长度
-        self.gconv1 = nn.ModuleList()  # 用于保存第一个图卷积层
-        self.gconv2 = nn.ModuleList()  # 用于保存第二个图卷积层
-        self.scale_convs = nn.ModuleList()  # 用于保存尺度卷积层
-        if self.single_step:    # 根据single_step设定卷积核大小
-            self.kernel_set = [7, 6, 3, 2]  # kernel_size=args.kernel_size，还是可以手动调节，选择最合适的，固定尺度
+        self.layer_num=3   
+        self.gcn_depth = 2  
+        self.conv_channels=100   
+        self.gnn_channels = [8, 16, 32, 64]  
+        self.scale_channels=[8, 16, 32, 64]  
+        self.gc = graph_constructor(n_features, subgraph_size, node_dim, self.layer_num, device)  
+        self.idx = torch.arange(n_features).to(device)  
+        self.scale_idx = torch.arange(n_features).to(device) 
+        self.seq_length = 24*7 
+        self.gconv1 = nn.ModuleList() 
+        self.gconv2 = nn.ModuleList()  
+        self.scale_convs = nn.ModuleList()  
+        if self.single_step:    
+            self.kernel_set = [7, 6, 3, 2]  
         else:
             self.kernel_set = [3, 2, 2]
         length_set = []
-        length_set.append(self.seq_length - self.kernel_set[0] + 1)  # 第一个卷积核的尺寸
-        for i in range(1, self.layer_num): # 模块a：从小尺度卷积到大尺度 根据卷积核大小和层数计算每一层的卷积长度
-            length_set.append( int( (length_set[i-1]-self.kernel_set[i])/2 ) ) # 卷积核慢慢变成大尺度
-        for i in range(self.layer_num): # 模块c：融合特定尺度表示和邻接矩阵并获取特定的尺度表示
-            """
-            RNN based model
-            """
-            # self.agcrn.append(AGCRN(num_nodes=self.num_nodes, input_dim=conv_channels, hidden_dim=scale_channels, num_layers=1) )
-            self.gconv1.append(mixprop(self.conv_channels, self.gnn_channels[i], self.gcn_depth, dropout, propalpha)) # 获取特定尺度表示，融合邻接矩阵和尺度表示
+        length_set.append(self.seq_length - self.kernel_set[0] + 1) 
+        for i in range(1, self.layer_num):
+            length_set.append( int( (length_set[i-1]-self.kernel_set[i])/2 ) )
+        for i in range(self.layer_num):       
+            self.gconv1.append(mixprop(self.conv_channels, self.gnn_channels[i], self.gcn_depth, dropout, propalpha))
             self.gconv2.append(mixprop(self.conv_channels, self.gnn_channels[i], self.gcn_depth, dropout, propalpha))
             self.scale_convs.append(nn.Conv2d(in_channels=self.conv_channels, # 尺度卷积层
                                                     out_channels=self.scale_channels[i],
                                                     kernel_size=(1, length_set[i])))
-            # self.linear_model = LinearForReshape()
             self.linear_model = Conv1DReshape()
 
-            # ----------初始化邻接矩阵-----------#
-
-        # ----------- next:contrastive study -----------#
-        # d_model = 64
         d_model = 256
         win_size = window_size
         patch_size = [4, 5, 10]
-        # patch_size = [3, 5, 7]
         self.patch_size = patch_size
         self.win_size = win_size
-        enc_in = n_features     # 暂定
-        c_out = n_features     # 暂定
-        channel = n_features    # 暂定
+        enc_in = n_features  
+        c_out = n_features   
+        channel = n_features    
         output_attention = True
         e_layers = 3
         n_heads = 1
-        # init contrastive
-        # Patching List
         self.embedding_patch_size = nn.ModuleList()
         self.embedding_patch_num = nn.ModuleList()
         for i, patchsize in enumerate(self.patch_size):
             self.embedding_patch_size.append(DataEmbedding(patchsize, d_model, dropout))
             self.embedding_patch_num.append(DataEmbedding(self.win_size // patchsize, d_model, dropout))
-
         self.embedding_window_size = DataEmbedding(enc_in, d_model, dropout)
-        # Dual Attention Encoder
         self.encoder = Encoder(
             [
                 AttentionLayer(
@@ -160,9 +138,6 @@ class MTAD_GAT(nn.Module):
         )
 
         self.projection = nn.Linear(d_model, c_out, bias=True)
-        # end of contrastive
-
-
 
     def forward(self, x):
         # x shape (b, n, k): b - batch size, n - window size, k - number of features
