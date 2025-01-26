@@ -16,14 +16,9 @@ def get_parser():
     parser = argparse.ArgumentParser()
 
     # -- Data params ---
-    parser.add_argument("--dataset", default="SMD") # str.upper--将小写字母转为大写字母24.7.29change
-    # parser.add_argument("--dataset", type=str.upper, default="SWaT") # str.upper--将小写字母转为大写字母
-    # parser.add_argument("--dataset", type=str.upper, default="SMD") # str.upper--将小写字母转为大写字母24.7.29change
-    # parser.add_argument("--group", type=str, default="1-1", help="Required for SMD dataset. <group_index>-<index>")
+    parser.add_argument("--dataset", default="SWaT") # str.upper--将小写字母转为大写字母24.7.29change
     parser.add_argument("--group", type=str, default="C-1", help="Required for MSL dataset. <group_index>-<index>") # 24.7.29change
     parser.add_argument("--lookback", type=int, default=100) # argument for window_size
-    # parser.add_argument("--lookback", type=int, default=100) # argument for window_size
-    # parser.add_argument("--lookback", type=int, default=100) # argument for window_size
     parser.add_argument("--normalize", type=str2bool, default=True)
     parser.add_argument("--spec_res", type=str2bool, default=False)
 
