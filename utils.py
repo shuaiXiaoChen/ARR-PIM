@@ -93,12 +93,7 @@ def get_data(dataset, max_train_size=None, max_test_size=None,
     elif str(dataset).startswith("SMAP"):
         flag = "SMAP"
         prefix = prefix + "/SourceDatasets/SMAP/" + dataset  # 统一处理smap
-        # prefix = prefix + "/SourceDatasets/SMAP&MSL/" + dataset  # 这个代码用于分机器操作
-    elif str(dataset).startswith("machine"):  # this is SMD，划分机器进行异常检测
-        prefix += f"/ServerMachineDataset/processed/{dataset}"
-        flag = "SMD"
-        print("flag:",flag)
-    elif dataset in ["WADI", "SWaT", "PSM","SMD"]:
+    elif dataset in ["WADI", "SWaT", "PSM"]:
         prefix = prefix + f"/SourceDatasets/{dataset}/{dataset}"
         flag = dataset
 
@@ -138,13 +133,11 @@ def get_data(dataset, max_train_size=None, max_test_size=None,
             # print("t.shape:",t.shape)
             test_data = pickle.load(f).reshape((-1, x_dim))[test_start:test_end, :]
             print("test_data.shape:", test_data.shape)
-            # test_data = pickle.load(f)
             f.close()
         else:
             f = open(os.path.join(prefix, dataset + "_test.pkl"), "rb")
             test_data = pickle.load(f).reshape((-1, x_dim))[test_start:test_end, :]
             print("test_data.shape:", test_data.shape)
-            # test_data = pickle.load(f)
             f.close()
     except (KeyError, FileNotFoundError):
         test_data = None
@@ -158,7 +151,6 @@ def get_data(dataset, max_train_size=None, max_test_size=None,
             f.close()
         else:
             f = open(os.path.join(prefix, dataset + "_test_label.pkl"), "rb")
-            # test_label = pickle.load(f)
             test_label = pickle.load(f).reshape((-1))[test_start:test_end]
             print("test_label.shape: ", test_label.shape)
             f.close()
@@ -175,11 +167,6 @@ def get_data(dataset, max_train_size=None, max_test_size=None,
     return (train_data, None), (test_data, test_label)
 
 
-"""
-    数据处理逻辑，将生成的混合train、test、label 的pkl文件做一个预处理，将他按照smd的格式来分成3部分共27个机器，
-    每个机器包含3个pkl，分别为train、test、label.pkl文件，它的相对存储路径为：datasets/SourceDatasets/MSL，
-    命名形式为：-pkl
-"""
 def load_MSL_SMAP(dataset): # 自己写的数据处理代码
     train_data = dataset["train_data"]
     test_data = dataset["test_data"]
