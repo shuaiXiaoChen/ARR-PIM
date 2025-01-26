@@ -184,7 +184,6 @@ class Predictor:
         with open(f"{self.save_path}/{self.summary_file_name}", "w") as f:
             json.dump(summary, f, indent=2)
 
-        # 将所有批次运行的f1放到同一个文件文件中，以方便判断
         flag = self.dataset
         if flag == 'MSL':
             print("self.dataset of predictin is: ",self.dataset)
@@ -230,8 +229,6 @@ class Predictor:
                         + f"\tbf_result: {summary['bf_result']['f1']}"
                         + f"\tepoch: {epochs}\n")
 
-
-        # Save anomaly predictions made using epsilon method (could be changed to pot or bf-method)
         if save_output:
             global_epsilon = e_eval["threshold"]
             test_pred_df["A_True_Global"] = true_anomalies
@@ -248,12 +245,10 @@ class Predictor:
             train_pred_df.to_pickle(f"{self.save_path}/train_output.pkl")
             test_pred_df.to_pickle(f"{self.save_path}/test_output.pkl")
 
-        # 在这里添加修改了代码
         self.plot_auprc_auroc(test_pred_df['A_Score_Global'], true_anomalies)
 
         print("-- Done.")
 
-    # 在这里进行画图auroc和auprc
     def plot_auprc_auroc(self, anomaly_scores, true_anomalies):
         precision, recall, _ = precision_recall_curve(true_anomalies, anomaly_scores)
         fpr, tpr, _ = roc_curve(true_anomalies, anomaly_scores)
