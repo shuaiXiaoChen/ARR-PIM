@@ -13,90 +13,59 @@ import seaborn as sns
 
 def normalize_data(data, scaler=None):
     data = np.asarray(data, dtype=np.float32)
-    if np.any(sum(np.isnan(data))): # 将nan替换为0
+    if np.any(sum(np.isnan(data))): 
         data = np.nan_to_num(data)
 
-    if scaler is None: # 归一化，最小最大实现
+    if scaler is None: 
         scaler = MinMaxScaler()
-        scaler.fit(data) # 拟合数组，记录最大和最小值，方便后续操作
-    data = scaler.transform(data) # 进行数组的转换，缩放
+        scaler.fit(data) 
+    data = scaler.transform(data) 
     print("Data normalized")
 
-    return data, scaler # 返回缩放后的数组和缩放对象
+    return data, scaler 
 
 
 def get_data_dim(dataset):
-    """
-    :param dataset: Name of dataset
-    :return: Number of dimensions in data # 返回数据维度
-    """
+
     if dataset == "SMAP":
         return 25
     elif dataset == "MSL":
-        return 55
-    # elif str(dataset).startswith("machine"):
-    elif dataset == "SMD":
-        return 38
+        return 5
     elif dataset == "SWaT":
         return 51
     elif dataset == "WADI":
-        return 123  # 127个特征，来自123个传感器和执行器
-    elif dataset == "PSM":
-        return 25
+        return 123  
     else:
         raise ValueError("unknown dataset " + str(dataset))
 
 
 def get_target_dims(dataset):
-    """
-    :param dataset: Name of dataset
-    :return: index of data dimension that should be modeled (forecasted and reconstructed),
-                     returns None if all input dimensions should be modeled;
-                     none表示重构所有特征，o表示重构维度为1
-    """
+
     if dataset == "SMAP":
         return None
-        # return [0]
     elif dataset == "MSL":
-        return None
-        # return [0]
-    elif dataset == "SMD":  # 用于预测维度
-        # return [0]
         return None
     elif dataset == "WADI":
         return None
-        # return [0]
     elif dataset == "SWaT":
         return None
-        # return [0]
-    elif dataset == "PSM":
-        return None
-        # return [0]
     else:
         raise ValueError("unknown dataset " + str(dataset))
 
 
 def get_data(dataset, max_train_size=None, max_test_size=None,
              normalize=False, spec_res=False, train_start=0, test_start=0):
-    """
-    Get data from pkl files
-
-    return shape: (([train_size, x_dim], [train_size] or None), ([test_size, x_dim], [test_size]))
-    Method from OmniAnomaly (https://github.com/NetManAIOps/OmniAnomaly)
-    """
     prefix = "datasets"
     flag = None
     if str(dataset).startswith("MSL"):
         flag = "MSL"
-        prefix = prefix + "/SourceDatasets/MSL/" + dataset  # 统一处理msl
-        # prefix = prefix + "/SourceDatasets/SMAP&MSL/" + dataset  # 这个代码用于分机器操作
+        prefix = prefix + "/SourceDatasets/MSL/" + dataset 
     elif str(dataset).startswith("SMAP"):
         flag = "SMAP"
-        prefix = prefix + "/SourceDatasets/SMAP/" + dataset  # 统一处理smap
-    elif dataset in ["WADI", "SWaT", "PSM"]:
+        prefix = prefix + "/SourceDatasets/SMAP/" + dataset
+    elif dataset in ["WADI", "SWaT"]:
         prefix = prefix + f"/SourceDatasets/{dataset}/{dataset}"
         flag = dataset
-
 
     if max_train_size is None:
         train_end = None
@@ -111,26 +80,21 @@ def get_data(dataset, max_train_size=None, max_test_size=None,
     print("train: ", train_start, train_end)
     print("test: ", test_start, test_end)
 
-   # 读取train，test，label的数据，numpy类型。
     if flag:
         print("flag:",flag)
         x_dim = get_data_dim(flag)
-        f = open(os.path.join(prefix+ "_train.pkl"), "rb")  # 打开一文件，二进制读
+        f = open(os.path.join(prefix+ "_train.pkl"), "rb")  
     else:
         x_dim = get_target_dims(dataset)
-        f = open(os.path.join(prefix, dataset + "_train.pkl"), "rb") # 打开一文件，二进制读
-    # t = pickle.load(f)
-    train_data = pickle.load(f).reshape((-1, x_dim))[train_start:train_end, :] # 重塑形状，列数为dim,这是smd的train
+        f = open(os.path.join(prefix, dataset + "_train.pkl"), "rb")
+    train_data = pickle.load(f).reshape((-1, x_dim))[train_start:train_end, :] 
     print("hello ,train load well and to numpy and reshape and iloc!!!")
     print("train_data.shape: ", train_data.shape)
-    # train_data = pickle.load(f)
     f.close()
 
     try:
         if flag:
             f = open(os.path.join(prefix+ "_test.pkl"), "rb")
-            # t = pickle.load(f)
-            # print("t.shape:",t.shape)
             test_data = pickle.load(f).reshape((-1, x_dim))[test_start:test_end, :]
             print("test_data.shape:", test_data.shape)
             f.close()
@@ -145,7 +109,6 @@ def get_data(dataset, max_train_size=None, max_test_size=None,
     try:
         if flag:
             f = open(os.path.join(prefix + "_test_label.pkl"), "rb")
-            # test_label = pickle.load(f)
             test_label = pickle.load(f).reshape((-1))[test_start:test_end]
             print("test_label.shape: ", test_label.shape)
             f.close()
@@ -158,16 +121,15 @@ def get_data(dataset, max_train_size=None, max_test_size=None,
         test_label = None
 
     if normalize:
-        train_data, scaler = normalize_data(train_data, scaler=None) # scaler用于保存缩放器对象及相关参数
-        test_data, _ = normalize_data(test_data, scaler=scaler) # scaler来自训练集，用于保证前后数据缩放参数一致。 _用于忽略缩放器对象
-
+        train_data, scaler = normalize_data(train_data, scaler=None) 
+        test_data, _ = normalize_data(test_data, scaler=scaler) 
     print("train set shape: ", train_data.shape)
     print("test set shape: ", test_data.shape)
     print("test set label shape: ", None if test_label is None else test_label.shape)
     return (train_data, None), (test_data, test_label)
 
 
-def load_MSL_SMAP(dataset): # 自己写的数据处理代码
+def load_MSL_SMAP(dataset):
     train_data = dataset["train_data"]
     test_data = dataset["test_data"]
     test_label = dataset["test_label"]
@@ -180,8 +142,7 @@ def load_MSL_SMAP(dataset): # 自己写的数据处理代码
         pass
     for i in range(lenth3):
         pass
-class SlidingWindowDataset(Dataset): # 为什么要返回两个？horizon表示想要预测的时间步长（滑动窗口）
-    # def __init__(self, data, window, target_dim=None, horizon=1):
+class SlidingWindowDataset(Dataset): 
     def __init__(self, data, window, target_dim=None, horizon=1):
         self.data = data
         self.window = window
@@ -194,7 +155,7 @@ class SlidingWindowDataset(Dataset): # 为什么要返回两个？horizon表示�
         return x, y
 
     def __len__(self):
-        return len(self.data) - self.window # 为什么要减去一个窗口大小
+        return len(self.data) - self.window 
 
 
 def create_data_loaders(train_dataset, batch_size, val_split=0.1, shuffle=True, test_dataset=None):
@@ -205,14 +166,14 @@ def create_data_loaders(train_dataset, batch_size, val_split=0.1, shuffle=True, 
 
     else:
         dataset_size = len(train_dataset)
-        indices = list(range(dataset_size)) # 创建一个列表0-size-1
-        split = int(np.floor(val_split * dataset_size)) # 表示起始索引位置
+        indices = list(range(dataset_size)) 
+        split = int(np.floor(val_split * dataset_size)) 
         if shuffle:
-            np.random.shuffle(indices) # 打乱顺序
+            np.random.shuffle(indices)
         train_indices, val_indices = indices[split:], indices[:split]
 
-        train_sampler = SubsetRandomSampler(train_indices) # 从数据集中随机迭代抽取一个子集
-        valid_sampler = SubsetRandomSampler(val_indices) # 或者说定义数据采样形式
+        train_sampler = SubsetRandomSampler(train_indices) 
+        valid_sampler = SubsetRandomSampler(val_indices) 
 
         train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, drop_last=True)
         val_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, sampler=valid_sampler, drop_last=True)
@@ -227,7 +188,7 @@ def create_data_loaders(train_dataset, batch_size, val_split=0.1, shuffle=True, 
     return train_loader, val_loader, test_loader
 
 
-def plot_losses(losses, save_path="", plot=True): # 这里进行可视化，但仅仅可视化了损失
+def plot_losses(losses, save_path="", plot=True): 
     """
     :param losses: dict with losses
     :param save_path: path where plots get saved
@@ -279,26 +240,11 @@ def tensor_to_list_generator(tensor):
     elif isinstance(tensor, list):
         for item in tensor:
             yield from tensor_to_list_generator(item)
-def plot_data(process_data, save_path="", plot=True):    # 可视化预测和重构后的数据
+def plot_data(process_data, save_path="", plot=True):  
     """
     :param losses: dict with data
     :param save_path: path where plots get saved
     """
-    # epoch_num = len(process_data["y_pred"])
-    # x_x = process_data["x_x"]
-    # x_recon = process_data["x_recon"]
-    # y_y = process_data["y_y"]
-    # y_pred = process_data["y_pred"]
-    # print("x_x.shape:654321:",len(x_x),"x_x[0].shape:654321:",len(x_x[0]),"x_x[0][0].shape:654321:",len(x_x[0][0]))
-    # print("x_recon.shape:654321:",len(x_recon),"x_recon[0].shape:654321:",len(x_recon[0]), "x_recon[0][0].shape:654321:",len(x_recon[0][0]))
-    # print("y_y.shape:",len(y_y),"y_y[0].shape:",len(y_y[0]),"len(y_y[0][0]):",len(y_y[0][0]))
-    # print("y_pred.shape:",len(y_pred),"y_pred[0].shape:",len(y_pred[0]),"len(y_pred[0][0]):",len(y_pred[0][0]))
-    # print("x_x:",x_x[0][0:2])
-    # print("y_y:",y_y[0][0:2])
-
-    print("--------------first-------------")
-    # 提取每个变量的所有 epochs 数据，确保每个元素是张量
-    # 检查数据并展平结构
     def convert_to_numpy(tensor_data):
         if isinstance(tensor_data, list):
             tensor_data = torch.stack([torch.tensor(item) if isinstance(item, list) else item for item in tensor_data])
@@ -307,10 +253,8 @@ def plot_data(process_data, save_path="", plot=True):    # 可视化预测和重
         else:
             return tensor_data.cpu().numpy()
 
-    # 转换所有数据
+
     print("x_x[0]: ", len(process_data["x_x"][0]))
-    # x_x_list = [convert_to_numpy(x_tensor).squeeze() for x_tensor in process_data["x_x"] if x_tensor]
-    # x_recon_list = [convert_to_numpy(x_tensor).squeeze() for x_tensor in process_data["x_recon"] if x_tensor]
     if process_data["dataset"] =="SMD":
         x_x_list = []
         x_recon_list = []
@@ -326,28 +270,24 @@ def plot_data(process_data, save_path="", plot=True):    # 可视化预测和重
     y_y_list = [convert_to_numpy(y_tensor) for y_tensor in process_data["y_y"] if y_tensor]
     y_pred_list = [convert_to_numpy(y_tensor) for y_tensor in process_data["y_pred"] if y_tensor]
 
-    # 输出每一个epoch的形状信息
+
     for i in range(len(x_x_list)):
         print(f"x_x[{i}].shape:", x_x_list[i].shape)
         print(f"x_recon[{i}].shape:", x_recon_list[i].shape)
         print(f"y_y[{i}].shape:", y_y_list[i].shape)
         print(f"y_pred[{i}].shape:", y_pred_list[i].shape)
 
-    # print(f"x_x_list[0][0]:", x_x_list[0][0][0:100])    # x_x_list[epoch][row(119143)][column(100)]
-    # print(f"x_x_list[0][0].type:", type(x_x_list[0][0]))
+
     epoch_num = len(x_x_list)
 
-    # this is for heap map paint
     x_x_heap_map = [x_x_list[i] for i in range(epoch_num)]
     x_recon_heap_map = [x_recon_list[i] for i in range(epoch_num)]
 
-    x_x_list_a = [x_x_list[i][:, 2] for i in range(epoch_num)]    # 生成二维列表（epoch，所有行第三个元素组成新列表）
-    x_recon_list_a = [x_recon_list[i][:, 2] for i in range(epoch_num)]    # 生成二维列表（epoch，所有行第三个元素组成新列表）
-    print("len(x_x_list_a):", len(x_x_list_a), "type(x_x_list_a):", type(x_x_list_a), "len(plot_x_x_a[0]):", len(x_x_list_a[0]))
-    print("-------------------above about y-----------------------")
-    # 按照epoch分别可视化重构数据，可视化预测数据
+    x_x_list_a = [x_x_list[i][:, 2] for i in range(epoch_num)]    
+    x_recon_list_a = [x_recon_list[i][:, 2] for i in range(epoch_num)]   
+
     for i in range(epoch_num):
-        plt.plot(x_recon_list_a[i][:100], label="recon_data")  # 可视化重构数据
+        plt.plot(x_recon_list_a[i][:100], label="recon_data")  
         plt.plot(x_x_list_a[i][:100], label="orig_train")
         plt.title("reconstruct and predict data")
         plt.xlabel("Time")
@@ -358,7 +298,7 @@ def plot_data(process_data, save_path="", plot=True):    # 可视化预测和重
             plt.show()
         plt.close()
     for i in range(epoch_num):
-        plt.plot(y_pred_list[i][:100], label="pred_data")  # 可视化预测数据
+        plt.plot(y_pred_list[i][:100], label="pred_data")  
         plt.plot(y_y_list[i][:100], label="label_data")
         plt.title("predict")
         plt.xlabel("Time")
@@ -369,39 +309,15 @@ def plot_data(process_data, save_path="", plot=True):    # 可视化预测和重
             plt.show()
         plt.close()
 
-        # # 处理三维数据，计算相关系数矩阵
-        # for i in range(epoch_num):
-        #     # 将三维数据展平为二维数据
-        #     x_x_2d = x_x_list[i].reshape(-1, x_x_list[i].shape[2])
-        #     x_recon_2d = x_recon_list[i].reshape(-1, x_recon_list[i].shape[2])
-        #
-        #     # 计算相关系数矩阵
-        #     x_x_heap_map_df = pd.DataFrame(x_x_2d)
-        #     x_recon_heap_map_df = pd.DataFrame(x_recon_2d)
-        #
-        #     corr_matrix_x_x = x_x_heap_map_df.corr()
-        #     corr_matrix_x_recon = x_recon_heap_map_df.corr()
-        #
-        #     # 绘制热力图
-        #     sns.heatmap(corr_matrix_x_x, annot=True, cmap='coolwarm', center=0)
-        #     plt.title(f'Correlation between Variables in Original Data - Epoch {i}')
-        #     plt.savefig(f"{save_path}/corr_matrix_x_{i}.png", bbox_inches="tight")
-        #     plt.show() if plot else plt.close()
-        #
-        #     sns.heatmap(corr_matrix_x_recon, annot=True, cmap='coolwarm', center=0)
-        #     plt.title(f'Correlation between Variables in Reconstructed Data - Epoch {i}')
-        #     plt.savefig(f"{save_path}/corr_matrix_recon_{i}.png", bbox_inches="tight")
-        #     plt.show() if plot else plt.close()
-    # 处理三维数据，计算相关系数矩阵
+        
     for i in range(epoch_num):
-        # 将三维数据展平为二维数据
-        x_x_2d_mean = np.mean(x_x_list[i], axis=1)  # 计算均值
-        x_recon_2d_mean = np.mean(x_recon_list[i], axis=1)  # 计算均值
+     
+        x_x_2d_mean = np.mean(x_x_list[i], axis=1)  
+        x_recon_2d_mean = np.mean(x_recon_list[i], axis=1) 
 
-        x_x_2d_max = np.max(x_x_list[i], axis=1)  # 计算最大值
-        x_recon_2d_max = np.max(x_recon_list[i], axis=1)  # 计算最大值
+        x_x_2d_max = np.max(x_x_list[i], axis=1)  
+        x_recon_2d_max = np.max(x_recon_list[i], axis=1) 
 
-        # 计算相关系数矩阵
         x_x_heap_map_df_mean = pd.DataFrame(x_x_2d_mean)
         x_recon_heap_map_df_mean = pd.DataFrame(x_recon_2d_mean)
 
@@ -414,28 +330,28 @@ def plot_data(process_data, save_path="", plot=True):    # 可视化预测和重
         corr_matrix_x_x_max = x_x_heap_map_df_max.corr()
         corr_matrix_x_recon_max = x_recon_heap_map_df_max.corr()
 
-        # 绘制热力图
+  
         sns.heatmap(corr_matrix_x_x_mean, annot=False, cmap='coolwarm', center=0)
         plt.title(f'Correlation between Variables in Original Data (Mean)')
-        # plt.title(f'Correlation between Variables in Original Data (Mean) - Epoch {i}')
+
         plt.savefig(f"{save_path}/corr_matrix_x_mean_{i}.png", bbox_inches="tight")
         plt.show() if plot else plt.close()
 
         sns.heatmap(corr_matrix_x_recon_mean, annot=False, cmap='coolwarm', center=0)
         plt.title(f'Correlation between Variables in Reconstructed Data (Mean)')
-        # plt.title(f'Correlation between Variables in Reconstructed Data (Mean) - Epoch {i}')
+
         plt.savefig(f"{save_path}/corr_matrix_recon_mean_{i}.png", bbox_inches="tight")
         plt.show() if plot else plt.close()
 
         sns.heatmap(corr_matrix_x_x_max, annot=False, cmap='coolwarm', center=0)
         plt.title(f'Correlation between Variables in Original Data (Max)')
-        # plt.title(f'Correlation between Variables in Original Data (Max) - Epoch {i}')
+
         plt.savefig(f"{save_path}/corr_matrix_x_max_{i}.png", bbox_inches="tight")
         plt.show() if plot else plt.close()
 
         sns.heatmap(corr_matrix_x_recon_max, annot=False, cmap='coolwarm', center=0)
         plt.title(f'Correlation between Variables in Reconstructed Data (Max)')
-        # plt.title(f'Correlation between Variables in Reconstructed Data (Max) - Epoch {i}')
+
         plt.savefig(f"{save_path}/corr_matrix_recon_max_{i}.png", bbox_inches="tight")
         plt.show() if plot else plt.close()
 
@@ -475,8 +391,8 @@ def adjust_anomaly_scores(scores, dataset, is_train, lookback):
     :param lookback: lookback (window size) used in model
     """
 
-    # Remove errors for time steps when transition to new channel (as this will be impossible for model to predict)
-    if dataset.upper() not in ['SMAP', 'MSL']: # 原来只有smap和msl,,'WADI','SMD'
+
+    if dataset.upper() not in ['SMAP', 'MSL']:
         return scores
 
     adjusted_scores = scores.copy()
@@ -488,10 +404,10 @@ def adjust_anomaly_scores(scores, dataset, is_train, lookback):
 
     md = md[md['chan_id'] != 'P-2']
 
-    # Sort values by channel
+
     md = md.sort_values(by=['chan_id'])
 
-    # Getting the cumulative start index for each channel
+
     sep_cuma = np.cumsum(md['num_values'].values) - lookback
     sep_cuma = sep_cuma[:-1]
     buffer = np.arange(1, 20)
@@ -508,9 +424,9 @@ def adjust_anomaly_scores(scores, dataset, is_train, lookback):
     for c_start, c_end in [(s[i], s[i+1]) for i in range(len(s)-1)]:
         e_s = adjusted_scores[c_start: c_end+1]
 
-        if e_s.size == 0: # 跳过空数组以避免错误。
-                          # 该检查确保在进行归一化操作之前，e_s 不是一个空数组，从而防止引发 ValueErr
-            continue  # Skip empty slices to avoid errors
+        if e_s.size == 0: 
+                        
+            continue  
 
         e_s = (e_s - np.min(e_s))/(np.max(e_s) - np.min(e_s))
         adjusted_scores[c_start: c_end+1] = e_s
